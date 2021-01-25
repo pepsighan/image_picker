@@ -112,6 +112,19 @@ class ImagePicker {
     );
   }
 
+  /// Get images from gallery.
+  Future<List<PickedFile>> getImagesFromGallery({
+    double maxWidth,
+    double maxHeight,
+    int imageQuality,
+  }) {
+    return platform.pickImagesFromGallery(
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+      imageQuality: imageQuality,
+    );
+  }
+
   /// Returns a [File] object pointing to the video that was picked.
   ///
   /// The returned [File] is intended to be used within a single APP session. Do not save the file path and use it across sessions.

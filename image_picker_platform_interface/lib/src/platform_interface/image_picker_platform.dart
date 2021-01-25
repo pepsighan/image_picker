@@ -154,7 +154,7 @@ abstract class ImagePickerPlatform extends PlatformInterface {
   /// Picks a list of images from gallery.
   Future<List<PickedFile>> pickImagesFromGallery({
     double maxWidth,
-    double maxHeigth,
+    double maxHeight,
     int imageQuality,
   }) {
     throw UnimplementedError('pickImage() has not been implemented.');
