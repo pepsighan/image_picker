@@ -78,6 +78,7 @@ public class ImagePickerDelegate
   @VisibleForTesting static final int REQUEST_CODE_TAKE_IMAGE_WITH_CAMERA = 2343;
   @VisibleForTesting static final int REQUEST_EXTERNAL_IMAGE_STORAGE_PERMISSION = 2344;
   @VisibleForTesting static final int REQUEST_CAMERA_IMAGE_PERMISSION = 2345;
+  @VisibleForTesting static final int REQUEST_CODE_CHOOSE_IMAGES_FROM_GALLERY = 2346;
   @VisibleForTesting static final int REQUEST_CODE_CHOOSE_VIDEO_FROM_GALLERY = 2352;
   @VisibleForTesting static final int REQUEST_CODE_TAKE_VIDEO_WITH_CAMERA = 2353;
   @VisibleForTesting static final int REQUEST_EXTERNAL_VIDEO_STORAGE_PERMISSION = 2354;
@@ -331,11 +332,34 @@ public class ImagePickerDelegate
     launchPickImageFromGalleryIntent();
   }
 
+  public void chooseImagesFromGallery(MethodCall methodCall, MethodChannel.Result result) {
+    if (!setPendingMethodCallAndResult(methodCall, result)) {
+      finishWithAlreadyActiveError(result);
+      return;
+    }
+
+    if (!permissionManager.isPermissionGranted(Manifest.permission.READ_EXTERNAL_STORAGE)) {
+      permissionManager.askForPermission(
+          Manifest.permission.READ_EXTERNAL_STORAGE, REQUEST_EXTERNAL_IMAGE_STORAGE_PERMISSION);
+      return;
+    }
+
+    launchPickImagesFromGalleryIntent();    
+  }
+
   private void launchPickImageFromGalleryIntent() {
     Intent pickImageIntent = new Intent(Intent.ACTION_GET_CONTENT);
     pickImageIntent.setType("image/*");
 
     activity.startActivityForResult(pickImageIntent, REQUEST_CODE_CHOOSE_IMAGE_FROM_GALLERY);
+  }
+
+  private void launchPickImagesFromGalleryIntent() {
+    Intent pickImageIntent = new Intent(Intent.ACTION_GET_CONTENT);
+    pickImageIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+    pickImageIntent.setType("image/*");
+
+    activity.startActivityForResult(pickImageIntent, REQUEST_CODE_CHOOSE_IMAGES_FROM_GALLERY);
   }
 
   public void takeImageWithCamera(MethodCall methodCall, MethodChannel.Result result) {
@@ -470,6 +494,9 @@ public class ImagePickerDelegate
       case REQUEST_CODE_CHOOSE_IMAGE_FROM_GALLERY:
         handleChooseImageResult(resultCode, data);
         break;
+      case REQUEST_CODE_CHOOSE_IMAGES_FROM_GALLERY:
+        handleChooseImagesResult(resultCode, data);
+        break;
       case REQUEST_CODE_TAKE_IMAGE_WITH_CAMERA:
         handleCaptureImageResult(resultCode);
         break;
@@ -496,6 +523,34 @@ public class ImagePickerDelegate
     // User cancelled choosing a picture.
     finishWithSuccess(null);
   }
+
+
+  private void handleChooseImagesResult(int resultCode, Intent data) {
+    if (resultCode == Activity.RESULT_OK && data != null) {
+      List<String> paths = new ArrayList<String>();
+
+      if (data.getClipData() != null) {
+        // If there are multiple images in the intent result, separately add
+        // them.
+        int count = data.getClipData().getItemCount();
+        for (int i = 0; i < count; i++) {
+          Uri imageUri = data.getClipData().getItemAt(i).getUri();
+          String path = fileUtils.getPathFromUri(activity, imageUri);
+          paths.add(path);
+        }
+      } else {
+        String path = fileUtils.getPathFromUri(activity, data.getData());
+        paths.add(path);
+      }
+
+      handleImagesResult(paths, false);
+      return;
+    }
+
+    // User cancelled choosing a picture.
+    finishWithSuccess(null);
+  }
+
 
   private void handleChooseVideoResult(int resultCode, Intent data) {
     if (resultCode == Activity.RESULT_OK && data != null) {
@@ -566,6 +621,33 @@ public class ImagePickerDelegate
     }
   }
 
+  private void handleImagesResult(List<String> paths, boolean shouldDeleteOriginalIfScaled) {
+    if (methodCall != null) {
+      Double maxWidth = methodCall.argument("maxWidth");
+      Double maxHeight = methodCall.argument("maxHeight");
+      Integer imageQuality = methodCall.argument("imageQuality");
+      List<String> finalPaths = new ArrayList<String>();
+
+      for (int i = 0; i < paths.size(), i++) {
+        String path = paths.get(i);
+
+        String finalImagePath =
+          imageResizer.resizeImageIfNeeded(path, maxWidth, maxHeight, imageQuality);
+
+        finalPaths.add(finalImagePath);
+
+        //delete original file if scaled
+        if (finalImagePath != null && !finalImagePath.equals(path) && shouldDeleteOriginalIfScaled) {
+          new File(path).delete();
+        }
+      }
+
+      finishWithImagesSuccess(finalPaths);
+    } else {
+      finishWithImagesSuccess(paths);
+    }
+  }
+
   private void handleVideoResult(String path) {
     finishWithSuccess(path);
   }
@@ -583,6 +665,17 @@ public class ImagePickerDelegate
     cache.clear();
 
     return true;
+  }
+
+  private void finishWithImagesSuccess(List<String> imagePaths) {
+    if (pendingResult == null) {
+      for (int i = 0; i < imagePaths.size(); i++) {
+        cache.saveResult(imagePaths.get(i), null, null);
+      }
+      return;
+    }
+    pendingResult.success(imagePath);
+    clearMethodCallAndResult();
   }
 
   private void finishWithSuccess(String imagePath) {

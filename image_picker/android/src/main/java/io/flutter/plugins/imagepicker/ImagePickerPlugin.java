@@ -92,6 +92,7 @@ public class ImagePickerPlugin
   }
 
   static final String METHOD_CALL_IMAGE = "pickImage";
+  static final String METHOD_CALL_IMAGES_FROM_GALLERY = "pickImagesFromGallery";
   static final String METHOD_CALL_VIDEO = "pickVideo";
   private static final String METHOD_CALL_RETRIEVE = "retrieve";
   private static final int CAMERA_DEVICE_FRONT = 1;
@@ -315,6 +316,9 @@ public class ImagePickerPlugin
           default:
             throw new IllegalArgumentException("Invalid video source: " + imageSource);
         }
+        break;
+      case METHOD_CALL_IMAGES_FROM_GALLERY:
+        delegate.chooseImagesFromGallery(call, result);
         break;
       case METHOD_CALL_RETRIEVE:
         delegate.retrieveLostImage(result);
